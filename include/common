@@ -1,0 +1,47 @@
+#ifndef _VOXEL_SCORE_COMMON_
+#define _VOXEL_SCORE_COMMON_
+
+#include <memory>
+#include <Eigen/Dense>
+#include <Eigen/Geometry>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/search/kdtree.h>
+
+#include <boost/compute.hpp>
+
+namespace voxel_score {
+
+namespace gpu = boost::compute;
+
+typedef Eigen::Vector3f vec3f_t;
+typedef Eigen::RowVector3f rvec3f_t;
+typedef Eigen::Vector3i vec3i_t;
+typedef Eigen::RowVector3i rvec3i_t;
+typedef Eigen::Vector4f vec4f_t;
+typedef Eigen::RowVector4f rvec4f_t;
+typedef Eigen::Matrix3f mat3f_t;
+typedef Eigen::Matrix4f mat4f_t;
+typedef Eigen::MatrixXf matf_t;
+typedef Eigen::AlignedBox<float, 3> bbox3_t;
+
+typedef Eigen::Array3f arr3f_t;
+typedef Eigen::Array3i arr3i_t;
+
+struct gpu_state {
+    typedef std::shared_ptr<gpu_state> sptr_t;
+
+    gpu_state();
+
+    gpu::device device;
+    gpu::context context;
+    gpu::command_queue queue;
+};
+
+constexpr uint8_t max_integer_dist = 15;
+
+} // voxel_score
+
+#include "impl/common.hpp"
+
+#endif /* _VOXEL_SCORE_COMMON_ */

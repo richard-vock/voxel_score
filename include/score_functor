@@ -1,0 +1,42 @@
+#ifndef _VOXEL_SCORE_SCORE_FUNCTOR_
+#define _VOXEL_SCORE_SCORE_FUNCTOR_
+
+#include "model"
+#include "scene"
+
+namespace voxel_score {
+
+template <typename PointSceneT, typename PointModelT>
+class score_functor {
+    public:
+        typedef std::unique_ptr<score_functor>       uptr_t;
+        typedef std::shared_ptr<score_functor>       sptr_t;
+        typedef std::weak_ptr<score_functor>         wptr_t;
+        typedef std::shared_ptr<const score_functor> const_sptr_t;
+        typedef std::weak_ptr<const score_functor>   const_wptr_t;
+
+        typedef pcl::PointCloud<PointSceneT>         scene_cloud_t;
+        typedef pcl::PointCloud<PointModelT>         model_cloud_t;
+
+    public:
+        score_functor(gpu_state::sptr_t gstate);
+
+        virtual ~score_functor();
+
+        void set_scene(typename scene_cloud_t::ConstPtr scene);
+
+        void set_model(typename model_cloud_t::ConstPtr model, int max_dim_size);
+
+        float operator()(const mat4f_t& transform);
+
+    protected:
+        struct impl;
+        std::unique_ptr<impl> impl_;
+};
+
+
+} // voxel_score
+
+#include "impl/score_functor.hpp"
+
+#endif /* _VOXEL_SCORE_SCORE_FUNCTOR_ */

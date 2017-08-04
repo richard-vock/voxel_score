@@ -1,0 +1,44 @@
+#ifndef _VOXEL_SCORE_MODEL_
+#define _VOXEL_SCORE_MODEL_
+
+#include "common"
+
+namespace voxel_score {
+
+template <typename PointT>
+class model {
+public:
+    typedef std::unique_ptr<model<PointT>> uptr_t;
+    typedef std::shared_ptr<model<PointT>> sptr_t;
+    typedef std::weak_ptr<model<PointT>> wptr_t;
+    typedef std::shared_ptr<const model<PointT>> const_sptr_t;
+    typedef std::weak_ptr<const model<PointT>> const_wptr_t;
+
+    typedef pcl::PointCloud<PointT> cloud_t;
+    typedef gpu::vector<uint8_t> gpu_data_t;
+
+public:
+    model();
+
+    virtual ~model();
+
+    const mat4f_t& projection() const;
+
+    const vec3i_t& extents() const;
+
+    gpu::future<void> init(typename cloud_t::ConstPtr cloud, gpu_state::sptr_t state, int max_dim_size);
+
+    gpu_data_t& device_data();
+
+    const gpu_data_t& device_data() const;
+
+protected:
+    struct impl;
+    std::unique_ptr<impl> impl_;
+};
+
+}  // namespace voxel_score
+
+#include "impl/model.hpp"
+
+#endif /* _VOXEL_SCORE_MODEL_ */
