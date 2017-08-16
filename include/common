@@ -10,6 +10,8 @@
 
 #include <boost/compute.hpp>
 
+#include "config"
+
 namespace voxel_score {
 
 namespace gpu = boost::compute;

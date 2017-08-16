@@ -42,7 +42,17 @@ struct model<PointT>::impl {
             bbox.extend(base * pnt.getVector3fMap());
         }
         vec3f_t lower = bbox.min();
-        vec3f_t range = bbox.max() - lower;
+        vec3f_t upper = bbox.max();
+        vec3f_t range = upper - lower;
+        // fix for thin bboxes
+        float min_size = 0.1f * range.maxCoeff();
+        for (int i = 0; i < 3; ++i) {
+            if (range[i] < min_size) {
+                lower[i] -= 0.5f * min_size;
+                upper[i] += 0.5f * min_size;
+                range[i] = upper[i] - lower[i];
+            }
+        }
 
         float voxel_step = range.maxCoeff() / max_dim_size;
         extents_ = (range / voxel_step)
@@ -68,13 +78,10 @@ struct model<PointT>::impl {
         // TODO: get rid of these
         float max_dist = 0.f;
         for (int i = 0; i < extents_[0]; ++i) {
-            int x = i * extents_[1] * extents_[2];
             for (int j = 0; j < extents_[1]; ++j) {
-                int y = j * extents_[2];
                 for (int k = 0; k < extents_[2]; ++k) {
                     PointT query;
                     vec3f_t coords = vec3i_t(i, j, k).template cast<float>();
-                    ;
                     query.getVector3fMap() =
                         (inv * coords.homogeneous()).head(3);
                     std::vector<int> nns(1);
@@ -87,6 +94,7 @@ struct model<PointT>::impl {
         max_dist = sqrtf(max_dist);
 
         voxel_data_.resize(extents_[0] * extents_[1] * extents_[2]);
+
         for (int i = 0; i < extents_[0]; ++i) {
             int x = i * extents_[1] * extents_[2];
             for (int j = 0; j < extents_[1]; ++j) {
@@ -152,6 +160,12 @@ template <typename PointT>
 inline const typename model<PointT>::gpu_data_t&
 model<PointT>::device_data() const {
     return impl_->gpu_data_;
+}
+
+template <typename PointT>
+inline const std::vector<uint8_t>&
+model<PointT>::host_data() const {
+    return impl_->voxel_data_;
 }
 
 }  // namespace voxel_score

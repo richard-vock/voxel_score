@@ -35,6 +35,9 @@ protected:
 
 }  // namespace voxel_score
 
+#ifndef VOXEL_SCORE_PRECOMPILE_HEADERS
 #include "impl/scene.hpp"
+#endif // VOXEL_SCORE_PRECOMPILE_HEADERS
 
 #endif /* _VOXEL_SCORE_SCENE_ */
+// vim: syntax=cpp:

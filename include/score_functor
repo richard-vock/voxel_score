@@ -17,6 +17,7 @@ class score_functor {
 
         typedef pcl::PointCloud<PointSceneT>         scene_cloud_t;
         typedef pcl::PointCloud<PointModelT>         model_cloud_t;
+        typedef std::vector<int>                     subset_t;
 
     public:
         score_functor(gpu_state::sptr_t gstate);
@@ -29,6 +30,10 @@ class score_functor {
 
         float operator()(const mat4f_t& transform);
 
+        subset_t correspondences(const mat4f_t& transform, float max_normalized_dist);
+
+        const model<PointModelT>& get_model() const;
+
     protected:
         struct impl;
         std::unique_ptr<impl> impl_;
@@ -37,6 +42,9 @@ class score_functor {
 
 } // voxel_score
 
+#ifndef VOXEL_SCORE_PRECOMPILE_HEADERS
 #include "impl/score_functor.hpp"
+#endif // VOXEL_SCORE_PRECOMPILE_HEADERS
 
 #endif /* _VOXEL_SCORE_SCORE_FUNCTOR_ */
+// vim: syntax=cpp:

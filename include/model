@@ -32,6 +32,8 @@ public:
 
     const gpu_data_t& device_data() const;
 
+    const std::vector<uint8_t>& host_data() const;
+
 protected:
     struct impl;
     std::unique_ptr<impl> impl_;
@@ -39,6 +41,9 @@ protected:
 
 }  // namespace voxel_score
 
-#include "impl/model.hpp"
+#ifndef VOXEL_SCORE_PRECOMPILE_HEADERS
+#   include "impl/model.hpp"
+#endif
 
 #endif /* _VOXEL_SCORE_MODEL_ */
+// vim: syntax=cpp:
