@@ -15,7 +15,8 @@ public:
     typedef std::weak_ptr<const model<PointT>> const_wptr_t;
 
     typedef pcl::PointCloud<PointT> cloud_t;
-    typedef gpu::vector<uint8_t> gpu_data_t;
+    typedef gpu::vector<uint8_t> gpu_dist_data_t;
+    typedef gpu::vector<float> gpu_corr_data_t;
 
 public:
     model();
@@ -26,13 +27,23 @@ public:
 
     const vec3i_t& extents() const;
 
-    gpu::future<void> init(typename cloud_t::ConstPtr cloud, gpu_state::sptr_t state, int max_dim_size);
+    std::pair<gpu::future<void>, gpu::future<void>>
+    init(typename cloud_t::ConstPtr cloud, gpu_state::sptr_t state,
+         int max_dim_size);
 
-    gpu_data_t& device_data();
+    gpu_dist_data_t& device_distance_data();
 
-    const gpu_data_t& device_data() const;
+    const gpu_dist_data_t& device_distance_data() const;
 
-    const std::vector<uint8_t>& host_data() const;
+    const std::vector<uint8_t>& host_distance_data() const;
+
+    gpu_corr_data_t& device_correspondence_data();
+
+    const gpu_corr_data_t& device_correspondence_data() const;
+
+    const std::vector<uint32_t>& host_correspondence_data() const;
+
+    const vec3f_t& centroid() const;
 
 protected:
     struct impl;
