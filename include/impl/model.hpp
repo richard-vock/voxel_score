@@ -98,15 +98,14 @@ struct model<PointT>::impl {
             centroid_ += (cloud->points[i].getVector3fMap() - centroid_) / (i+1);
         }
 
-        distance_data_.resize(extents_[0] * extents_[1] * extents_[2]);
-        corr_data_.resize(extents_[0] * extents_[1] * extents_[2] * 3);
+        uint32_t voxel_count = extents_[0] * extents_[1] * extents_[2];
+        distance_data_.resize(voxel_count);
+        corr_data_.resize(4 * voxel_count);
 
         for (int i = 0; i < extents_[0]; ++i) {
             int x = i * extents_[1] * extents_[2];
-            int xd = i * extents_[1] * extents_[2] * 3;
             for (int j = 0; j < extents_[1]; ++j) {
                 int y = j * extents_[2];
-                int yd = j * extents_[2] * 3;
                 for (int k = 0; k < extents_[2]; ++k) {
                     PointT query;
                     vec3f_t coords = vec3i_t(i, j, k).template cast<float>();
@@ -118,9 +117,11 @@ struct model<PointT>::impl {
                     kdtree.nearestKSearch(query, 1, nns, dists);
                     distance_data_[x + y + k] =
                         max_integer_dist * (sqrtf(dists[0]) / max_dist);
-                    corr_data_[xd + yd + k*3 + 0] = cloud->points[nns[0]].x - centroid_[0];
-                    corr_data_[xd + yd + k*3 + 1] = cloud->points[nns[0]].y - centroid_[1];
-                    corr_data_[xd + yd + k*3 + 2] = cloud->points[nns[0]].z - centroid_[2];
+                    vec3f_t neigh = cloud->points[nns[0]].getVector3fMap();
+                    corr_data_[(x + y + k)*4 + 0] = neigh[0];
+                    corr_data_[(x + y + k)*4 + 1] = neigh[1];
+                    corr_data_[(x + y + k)*4 + 2] = neigh[2];
+                    corr_data_[(x + y + k)*4 + 3] = 1.f;
                 }
             }
         }
@@ -128,18 +129,21 @@ struct model<PointT>::impl {
         gpu_distance_data_ =
             gpu::vector<uint8_t>(distance_data_.size(), state->context);
         gpu_corr_data_ =
-            gpu::vector<float>(corr_data_.size(), state->context);
-        return {gpu::copy_async(distance_data_.begin(), distance_data_.end(),
-                                gpu_distance_data_.begin(), state->queue),
-                gpu::copy_async(corr_data_.begin(), corr_data_.end(),
-                                gpu_corr_data_.begin(), state->queue)};
+            gpu::vector<gpu::float4_>(corr_data_.size(), state->context);
+        return std::make_pair(
+            gpu::copy_async(distance_data_.begin(), distance_data_.end(),
+                            gpu_distance_data_.begin(), state->queue),
+            gpu::copy_async(reinterpret_cast<gpu::float4_*>(corr_data_.data()),
+                            reinterpret_cast<gpu::float4_*>(corr_data_.data()) +
+                                voxel_count,
+                            gpu_corr_data_.begin(), state->queue));
     }
 
     vec3i_t extents_;
     mat4f_t proj_;
     std::vector<uint8_t> distance_data_;
     gpu_dist_data_t gpu_distance_data_;
-    std::vector<uint32_t> corr_data_;
+    std::vector<float> corr_data_;
     gpu_corr_data_t gpu_corr_data_;
     vec3f_t centroid_;
 };
@@ -200,7 +204,7 @@ model<PointT>::device_correspondence_data() const {
 }
 
 template <typename PointT>
-inline const std::vector<uint32_t>&
+inline const std::vector<float>&
 model<PointT>::host_correspondence_data() const {
     return impl_->corr_data_;
 }

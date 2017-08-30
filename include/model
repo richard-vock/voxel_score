@@ -16,7 +16,7 @@ public:
 
     typedef pcl::PointCloud<PointT> cloud_t;
     typedef gpu::vector<uint8_t> gpu_dist_data_t;
-    typedef gpu::vector<float> gpu_corr_data_t;
+    typedef gpu::vector<gpu::float4_> gpu_corr_data_t;
 
 public:
     model();
@@ -41,7 +41,7 @@ public:
 
     const gpu_corr_data_t& device_correspondence_data() const;
 
-    const std::vector<uint32_t>& host_correspondence_data() const;
+    const std::vector<float>& host_correspondence_data() const;
 
     const vec3f_t& centroid() const;
 
