@@ -272,7 +272,7 @@ struct score_functor<PointSceneT, PointModelT>::impl {
         return result;
     }
 
-    mat4f_t icp(const mat4f_t& guess, float max_ndist, std::vector<vec3f_t>& debug) {
+    mat4f_t icp(const mat4f_t& guess, float max_ndist) {
         if (!ready_) {
             this->init();
         }
@@ -311,9 +311,6 @@ struct score_functor<PointSceneT, PointModelT>::impl {
             compute_centroid_(this->model_->device_correspondence_data(),
                               unique_indices_.begin(), unique_model);
 
-        std::cout << "scene centroid: " << centroid_scene << "\n";
-        std::cout << "model centroid: " << centroid_model << "\n";
-
         // compute correlation matrices
         icp_correlation_kernel_.set_arg(4, n_scene);
         icp_correlation_kernel_.set_arg(5, centroid_scene);
@@ -334,7 +331,6 @@ struct score_functor<PointSceneT, PointModelT>::impl {
         Eigen::JacobiSVD<mat3f_t> svd(corr_matrix, Eigen::ComputeFullU | Eigen::ComputeFullV);
         mat4f_t icp_mat = mat4f_t::Identity();
         icp_mat.topLeftCorner<3,3>() = svd.matrixV() * svd.matrixU().transpose();
-        std::cout << icp_mat << "\n";
         vec3f_t cm(centroid_model[0], centroid_model[1], centroid_model[2]);
         vec3f_t cs(centroid_scene[0], centroid_scene[1], centroid_scene[2]);
         icp_mat.block<3,1>(0,3) = cm - icp_mat.topLeftCorner<3,3>() * cs;
@@ -346,7 +342,7 @@ struct score_functor<PointSceneT, PointModelT>::impl {
             this->init();
         }
 
-        mat4f_t pt = this->model_->projection() * t.inverse();
+        mat4f_t pt = this->model_->projection() * t;
         gpu::eigen_copy_matrix_to_buffer(pt, this->transform_.begin(), this->gstate_->queue);
         score_kernel_.set_arg(6, this->transform_.get_buffer());
         this->gstate_->queue.enqueue_1d_range_kernel(score_kernel_, 0, global_threads_, detail::threads_per_block);
@@ -458,8 +454,8 @@ score_functor<PointSceneT, PointModelT>::correspondences(const mat4f_t& transfor
 
 template <typename PointSceneT, typename PointModelT>
 inline mat4f_t
-score_functor<PointSceneT, PointModelT>::icp(const mat4f_t& guess, float max_normalized_dist, std::vector<vec3f_t>& debug) {
-    return impl_->icp(guess, max_normalized_dist, debug);
+score_functor<PointSceneT, PointModelT>::icp(const mat4f_t& guess, float max_normalized_dist) {
+    return impl_->icp(guess, max_normalized_dist);
 }
 
 template <typename PointSceneT, typename PointModelT>

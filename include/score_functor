@@ -34,7 +34,7 @@ class score_functor {
 
         subset_t correspondences(const mat4f_t& transform, float max_normalized_dist);
 
-        mat4f_t icp(const mat4f_t& guess, float max_normalized_dist, std::vector<vec3f_t>& debug);
+        mat4f_t icp(const mat4f_t& guess, float max_normalized_dist);
 
         const model<PointModelT>& get_model() const;
 
