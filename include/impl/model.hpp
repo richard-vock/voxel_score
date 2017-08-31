@@ -33,7 +33,7 @@ struct model<PointT>::impl {
 
     std::pair<gpu::future<void>, gpu::future<void>>
     init(typename cloud_t::ConstPtr cloud, gpu_state::sptr_t state,
-         int max_dim_size) {
+         int max_dim_size, float margin_factor) {
         // compute local base
         mat3f_t base = detail::pca<PointT>(cloud).transpose();
         // compute bbox in local base
@@ -44,15 +44,19 @@ struct model<PointT>::impl {
         vec3f_t lower = bbox.min();
         vec3f_t upper = bbox.max();
         vec3f_t range = upper - lower;
-        // fix for thin bboxes
-        float min_size = 0.1f * range.maxCoeff();
-        for (int i = 0; i < 3; ++i) {
-            if (range[i] < min_size) {
-                lower[i] -= 0.5f * min_size;
-                upper[i] += 0.5f * min_size;
-                range[i] = upper[i] - lower[i];
-            }
-        }
+        vec3f_t margin = vec3f_t::Constant(margin_factor * range.maxCoeff());
+        lower -= margin;
+        upper += margin;
+        range = upper-lower;
+        // fix for thin bboxes -> I use general margin above instead
+        //float min_size = 0.1f * range.maxCoeff();
+        //for (int i = 0; i < 3; ++i) {
+            //if (range[i] < min_size) {
+                //lower[i] -= 0.5f * min_size;
+                //upper[i] += 0.5f * min_size;
+                //range[i] = upper[i] - lower[i];
+            //}
+        //}
 
         float voxel_step = range.maxCoeff() / max_dim_size;
         extents_ = (range / voxel_step)
@@ -169,8 +173,8 @@ model<PointT>::extents() const {
 template <typename PointT>
 inline std::pair<gpu::future<void>, gpu::future<void>>
 model<PointT>::init(typename cloud_t::ConstPtr cloud, gpu_state::sptr_t state,
-                    int max_dim_size) {
-    return impl_->init(cloud, state, max_dim_size);
+                    int max_dim_size, float margin_factor) {
+    return impl_->init(cloud, state, max_dim_size, margin_factor);
 }
 
 template <typename PointT>

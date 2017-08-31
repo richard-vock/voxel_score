@@ -272,7 +272,7 @@ struct score_functor<PointSceneT, PointModelT>::impl {
         return result;
     }
 
-    mat4f_t icp(const mat4f_t& guess, float max_ndist) {
+    mat4f_t icp(const mat4f_t& guess, float max_ndist, std::vector<vec3f_t>& c0, std::vector<int>& i1) {
         if (!ready_) {
             this->init();
         }
@@ -287,29 +287,45 @@ struct score_functor<PointSceneT, PointModelT>::impl {
         this->gstate_->queue.enqueue_1d_range_kernel(icp_projection_kernel_, 0, global_threads_, detail::threads_per_block);
 
         // generate index sets
-        auto valid_model = gpu::stable_partition(
+        valid_model_ = gpu::stable_partition(
             model_corrs_.begin(), model_corrs_.end(),
             boost::compute::lambda::_1 >= 0, this->gstate_->queue);
-        auto valid_scene = gpu::stable_partition(
+        valid_scene_ = gpu::stable_partition(
             scene_corrs_.begin(), scene_corrs_.end(),
             boost::compute::lambda::_1 >= 0, this->gstate_->queue);
 
         // model indices probably are redundant - for centroid computation we
         // need unique indices (copied into unique_indices_)
-        auto unique_model = get_unique_indices_(model_corrs_.begin(), valid_model);
+        auto unique_model = get_unique_indices_(model_corrs_.begin(), valid_model_);
 
         uint32_t n_model = unique_model.get_index();
-        uint32_t n_scene = valid_scene.get_index();
+        uint32_t n_scene = valid_scene_.get_index();
         if (!n_model) {
             // no correspondences
             return mat4f_t::Identity();
         }
+
         // compute centroids
         gpu::float4_ centroid_scene =
-            compute_centroid_(positions_, scene_corrs_.begin(), valid_scene);
+            compute_centroid_(positions_, scene_corrs_.begin(), valid_scene_);
         gpu::float4_ centroid_model =
             compute_centroid_(this->model_->device_correspondence_data(),
-                              unique_indices_.begin(), unique_model);
+                              model_corrs_.begin(), valid_model_);
+            //compute_centroid_(this->model_->device_correspondence_data(),
+                              //unique_indices_.begin(), unique_model);
+
+        std::vector<int> i0(n_scene);
+        i1.resize(n_scene);
+        c0.resize(n_scene);
+        gpu::copy(model_corrs_.begin(), valid_model_, i0.begin(), this->gstate_->queue);
+        gpu::copy(scene_corrs_.begin(), valid_scene_, i1.begin(), this->gstate_->queue);
+        for (uint32_t i = 0; i < n_scene; ++i) {
+            c0[i][0] = model_->host_correspondence_data()[i0[i]*4+0];
+            c0[i][1] = model_->host_correspondence_data()[i0[i]*4+1];
+            c0[i][2] = model_->host_correspondence_data()[i0[i]*4+2];
+        }
+        c0.push_back(vec3f_t(centroid_model[0], centroid_model[1], centroid_model[2]));
+        c0.push_back(vec3f_t(centroid_scene[0], centroid_scene[1], centroid_scene[2]));
 
         // compute correlation matrices
         icp_correlation_kernel_.set_arg(4, n_scene);
@@ -367,10 +383,10 @@ struct score_functor<PointSceneT, PointModelT>::impl {
     }
 
     void
-    set_model(typename pcl::PointCloud<PointModelT>::ConstPtr model_cloud, int max_dim_size) {
+    set_model(typename pcl::PointCloud<PointModelT>::ConstPtr model_cloud, int max_dim_size, float margin_factor) {
         this->model_ = std::make_unique<::voxel_score::model<PointModelT>>();
         std::tie(this->ready_model_dist_, this->ready_model_corr_) =
-            model_->init(model_cloud, this->gstate_, max_dim_size);
+            model_->init(model_cloud, this->gstate_, max_dim_size, margin_factor);
         this->has_model_ = true;
     }
 
@@ -390,6 +406,8 @@ struct score_functor<PointSceneT, PointModelT>::impl {
     gpu::vector<cl_long> score_output_;
     gpu::vector<int> model_corrs_;
     gpu::vector<int> scene_corrs_;
+    gpu::buffer_iterator<int> valid_model_;
+    gpu::buffer_iterator<int> valid_scene_;
     gpu::vector<int> unique_indices_;
     gpu::vector<gpu::float4_> positions_;
     gpu::vector<gpu::float16_> corr_matrices_;
@@ -430,8 +448,8 @@ score_functor<PointSceneT, PointModelT>::set_scene(typename scene_cloud_t::Const
 
 template <typename PointSceneT, typename PointModelT>
 inline void
-score_functor<PointSceneT, PointModelT>::set_model(typename model_cloud_t::ConstPtr model_cloud, int max_dim_size) {
-    impl_->set_model(model_cloud, max_dim_size);
+score_functor<PointSceneT, PointModelT>::set_model(typename model_cloud_t::ConstPtr model_cloud, int max_dim_size, float margin_factor) {
+    impl_->set_model(model_cloud, max_dim_size, margin_factor);
 }
 
 template <typename PointSceneT, typename PointModelT>
@@ -454,8 +472,8 @@ score_functor<PointSceneT, PointModelT>::correspondences(const mat4f_t& transfor
 
 template <typename PointSceneT, typename PointModelT>
 inline mat4f_t
-score_functor<PointSceneT, PointModelT>::icp(const mat4f_t& guess, float max_normalized_dist) {
-    return impl_->icp(guess, max_normalized_dist);
+score_functor<PointSceneT, PointModelT>::icp(const mat4f_t& guess, float max_normalized_dist, std::vector<vec3f_t>& c0, std::vector<int>& i1) {
+    return impl_->icp(guess, max_normalized_dist, c0, i1);
 }
 
 template <typename PointSceneT, typename PointModelT>
