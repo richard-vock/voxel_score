@@ -22,7 +22,7 @@ public:
 
     virtual ~scene();
 
-    gpu::future<void> init(typename cloud_t::ConstPtr cloud, gpu_state::sptr_t state);
+    void init(typename cloud_t::ConstPtr cloud, gpu_state::sptr_t state);
 
     gpu_data_t& device_data();
 

@@ -31,7 +31,7 @@ struct model<PointT>::impl {
 
     ~impl() = default;
 
-    std::pair<gpu::future<void>, gpu::future<void>>
+    void
     init(typename cloud_t::ConstPtr cloud, gpu_state::sptr_t state,
          int max_dim_size, float margin_factor) {
         // compute local base
@@ -48,15 +48,6 @@ struct model<PointT>::impl {
         lower -= margin;
         upper += margin;
         range = upper-lower;
-        // fix for thin bboxes -> I use general margin above instead
-        //float min_size = 0.1f * range.maxCoeff();
-        //for (int i = 0; i < 3; ++i) {
-            //if (range[i] < min_size) {
-                //lower[i] -= 0.5f * min_size;
-                //upper[i] += 0.5f * min_size;
-                //range[i] = upper[i] - lower[i];
-            //}
-        //}
 
         float voxel_step = range.maxCoeff() / max_dim_size;
         extents_ = (range / voxel_step)
@@ -79,33 +70,11 @@ struct model<PointT>::impl {
         pcl::search::KdTree<PointT> kdtree;
         kdtree.setInputCloud(cloud);
 
-        // TODO: get rid of these
-        float max_dist = 0.f;
-        for (int i = 0; i < extents_[0]; ++i) {
-            for (int j = 0; j < extents_[1]; ++j) {
-                for (int k = 0; k < extents_[2]; ++k) {
-                    PointT query;
-                    vec3f_t coords = vec3i_t(i, j, k).template cast<float>();
-                    query.getVector3fMap() =
-                        (inv * coords.homogeneous()).head(3);
-                    std::vector<int> nns(1);
-                    std::vector<float> dists(1);
-                    kdtree.nearestKSearch(query, 1, nns, dists);
-                    max_dist = std::max(max_dist, dists[0]);
-                }
-            }
-        }
-        max_dist = sqrtf(max_dist);
-
-        centroid_ = vec3f_t::Zero();
-        for (uint32_t i = 0; i < cloud->size(); ++i) {
-            centroid_ += (cloud->points[i].getVector3fMap() - centroid_) / (i+1);
-        }
-
         uint32_t voxel_count = extents_[0] * extents_[1] * extents_[2];
-        distance_data_.resize(voxel_count);
-        corr_data_.resize(4 * voxel_count);
+        //distance_data_.resize(voxel_count);
+        cpu_data_.resize(voxel_count);
 
+        max_dist_ = 0.f;
         for (int i = 0; i < extents_[0]; ++i) {
             int x = i * extents_[1] * extents_[2];
             for (int j = 0; j < extents_[1]; ++j) {
@@ -119,36 +88,35 @@ struct model<PointT>::impl {
                     std::vector<int> nns(1);
                     std::vector<float> dists(1);
                     kdtree.nearestKSearch(query, 1, nns, dists);
-                    distance_data_[x + y + k] =
-                        max_integer_dist * (sqrtf(dists[0]) / max_dist);
+                    //distance_data_[x + y + k] =
+                        //max_integer_dist * (sqrtf(dists[0]) / max_dist);
                     vec3f_t neigh = cloud->points[nns[0]].getVector3fMap();
-                    corr_data_[(x + y + k)*4 + 0] = neigh[0];
-                    corr_data_[(x + y + k)*4 + 1] = neigh[1];
-                    corr_data_[(x + y + k)*4 + 2] = neigh[2];
-                    corr_data_[(x + y + k)*4 + 3] = 1.f;
+                    cpu_data_[x + y + k][0] = neigh[0];
+                    cpu_data_[x + y + k][1] = neigh[1];
+                    cpu_data_[x + y + k][2] = neigh[2];
+                    cpu_data_[x + y + k][3] = 1.f;
+                    max_dist_ = std::max(max_dist_, dists[0]);
                 }
             }
         }
+        max_dist_ = sqrtf(max_dist_);
 
-        gpu_distance_data_ =
-            gpu::vector<uint8_t>(distance_data_.size(), state->context);
-        gpu_corr_data_ =
-            gpu::vector<gpu::float4_>(corr_data_.size(), state->context);
-        return std::make_pair(
-            gpu::copy_async(distance_data_.begin(), distance_data_.end(),
-                            gpu_distance_data_.begin(), state->queue),
-            gpu::copy_async(reinterpret_cast<gpu::float4_*>(corr_data_.data()),
-                            reinterpret_cast<gpu::float4_*>(corr_data_.data()) +
-                                voxel_count,
-                            gpu_corr_data_.begin(), state->queue));
+        centroid_ = vec3f_t::Zero();
+        for (uint32_t i = 0; i < cloud->size(); ++i) {
+            centroid_ += (cloud->points[i].getVector3fMap() - centroid_) / (i+1);
+        }
+
+        gpu_data_ =
+            gpu::vector<gpu::float4_>(cpu_data_.size(), state->context);
+        std::cout << "VS model alloc: " << (static_cast<double>(4 * cpu_data_.size() * sizeof(float)) / (1024*1024)) << "MiB\n";
+        gpu::copy(cpu_data_.begin(), cpu_data_.end(), gpu_data_.begin(), state->queue);
     }
 
     vec3i_t extents_;
     mat4f_t proj_;
-    std::vector<uint8_t> distance_data_;
-    gpu_dist_data_t gpu_distance_data_;
-    std::vector<float> corr_data_;
-    gpu_corr_data_t gpu_corr_data_;
+    cpu_data_t cpu_data_;
+    gpu_data_t gpu_data_;
+    float max_dist_;
     vec3f_t centroid_;
 };
 
@@ -171,52 +139,40 @@ model<PointT>::extents() const {
 }
 
 template <typename PointT>
-inline std::pair<gpu::future<void>, gpu::future<void>>
+inline void
 model<PointT>::init(typename cloud_t::ConstPtr cloud, gpu_state::sptr_t state,
                     int max_dim_size, float margin_factor) {
     return impl_->init(cloud, state, max_dim_size, margin_factor);
 }
 
 template <typename PointT>
-inline typename model<PointT>::gpu_dist_data_t&
-model<PointT>::device_distance_data() {
-    return impl_->gpu_distance_data_;
+inline typename model<PointT>::gpu_data_t&
+model<PointT>::device_data() {
+    return impl_->gpu_data_;
 }
 
 template <typename PointT>
-inline const typename model<PointT>::gpu_dist_data_t&
-model<PointT>::device_distance_data() const {
-    return impl_->gpu_distance_data_;
+inline const typename model<PointT>::gpu_data_t&
+model<PointT>::device_data() const {
+    return impl_->gpu_data_;
 }
 
 template <typename PointT>
-inline const std::vector<uint8_t>&
-model<PointT>::host_distance_data() const {
-    return impl_->distance_data_;
-}
-
-template <typename PointT>
-inline typename model<PointT>::gpu_corr_data_t&
-model<PointT>::device_correspondence_data() {
-    return impl_->gpu_corr_data_;
-}
-
-template <typename PointT>
-inline const typename model<PointT>::gpu_corr_data_t&
-model<PointT>::device_correspondence_data() const {
-    return impl_->gpu_corr_data_;
-}
-
-template <typename PointT>
-inline const std::vector<float>&
-model<PointT>::host_correspondence_data() const {
-    return impl_->corr_data_;
+inline const typename model<PointT>::cpu_data_t&
+model<PointT>::host_data() const {
+    return impl_->cpu_data_;
 }
 
 template <typename PointT>
 inline const vec3f_t&
 model<PointT>::centroid() const {
     return impl_->centroid_;
+}
+
+template <typename PointT>
+inline float
+model<PointT>::max_distance() const {
+    return impl_->max_dist_;
 }
 
 }  // namespace voxel_score

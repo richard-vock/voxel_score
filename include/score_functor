@@ -28,13 +28,11 @@ class score_functor {
 
         void set_model(typename model_cloud_t::ConstPtr model, int max_dim_size, float margin_factor);
 
-        float operator()(const mat4f_t& transform);
-
         uint32_t correspondence_count(const mat4f_t& transform, float max_normalized_dist);
 
-        subset_t correspondences(const mat4f_t& transform, float max_normalized_dist);
-
-        mat4f_t icp(const mat4f_t& guess, float max_normalized_dist, std::vector<vec3f_t>& c0, std::vector<int>& i1);
+        std::pair<mat4f_t, std::vector<int>>
+        icp(const mat4f_t& guess, float max_normalized_dist,
+            uint32_t max_iterations);
 
         const model<PointModelT>& get_model() const;
 

@@ -6,7 +6,7 @@ struct scene<PointT>::impl {
 
     ~impl() {}
 
-    gpu::future<void>
+    void
     init(typename cloud_t::ConstPtr cloud, gpu_state::sptr_t state) {
         cloud_data_.resize(cloud->size() * 4);
         for (uint32_t i = 0; i < cloud->size(); ++i) {
@@ -17,7 +17,8 @@ struct scene<PointT>::impl {
         }
 
         gpu_data_ = gpu_data_t(cloud->size(), state->context);
-        return gpu::copy_async(
+        std::cout << "VS: scene alloc: " << (static_cast<double>(4 * cloud->size() * sizeof(float)) / (1024*1024)) << "MiB\n";
+        gpu::copy(
             reinterpret_cast<gpu::float4_*>(cloud_data_.data()),
             reinterpret_cast<gpu::float4_*>(cloud_data_.data()) + cloud->size(),
             gpu_data_.begin(), state->queue);
@@ -34,7 +35,8 @@ template <typename PointT>
 inline scene<PointT>::~scene() {}
 
 template <typename PointT>
-gpu::future<void> inline scene<PointT>::init(typename cloud_t::ConstPtr cloud,
+void
+inline scene<PointT>::init(typename cloud_t::ConstPtr cloud,
                                              gpu_state::sptr_t state) {
     return impl_->init(cloud, state);
 }
