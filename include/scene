@@ -22,11 +22,19 @@ public:
 
     virtual ~scene();
 
-    void init(typename cloud_t::ConstPtr cloud, gpu_state::sptr_t state);
+    void init(typename cloud_t::ConstPtr cloud, gpu_state::sptr_t state, const subset_t& valid = subset_t());
 
     gpu_data_t& device_data();
 
     const gpu_data_t& device_data() const;
+
+    gpu::vector<int>& device_mask();
+
+    const gpu::vector<int>& device_mask() const;
+
+    void reset_device_mask(gpu_state::sptr_t state, const subset_t& damage);
+
+    void update_device_mask(gpu_state::sptr_t state, const std::vector<int>& damage);
 
 protected:
     struct impl;

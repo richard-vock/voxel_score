@@ -2,11 +2,16 @@
 #define _VOXEL_SCORE_COMMON_
 
 #include <memory>
+#include <random>
+#include <range/v3/all.hpp>
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/search/kdtree.h>
+
+#include <fmt/format.h>
+#include <fmt/ostream.h>
 
 #include <boost/compute.hpp>
 
@@ -15,6 +20,8 @@
 namespace voxel_score {
 
 namespace gpu = boost::compute;
+
+typedef std::vector<uint32_t> subset_t;
 
 typedef Eigen::Vector3f vec3f_t;
 typedef Eigen::RowVector3f rvec3f_t;
@@ -41,6 +48,24 @@ struct gpu_state {
 };
 
 constexpr uint8_t max_integer_dist = 15;
+
+template <typename Rng>
+auto indexed(Rng&& rng, uint32_t start = 0u) {
+    return ranges::view::zip(ranges::view::ints(start), std::forward<Rng>(rng));
+}
+
+template <typename... Args>
+inline void pdebug(const char *format, const Args & ... args) {
+    fmt::print("[D] ");
+    fmt::print(format, args...);
+    putchar('\n');
+}
+
+template <typename... Args>
+inline void println(const char *format, const Args & ... args) {
+    fmt::print(format, args...);
+    putchar('\n');
+}
 
 } // voxel_score
 

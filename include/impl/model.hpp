@@ -32,8 +32,23 @@ struct model<PointT>::impl {
     ~impl() = default;
 
     void
-    init(typename cloud_t::ConstPtr cloud, gpu_state::sptr_t state,
-         int max_dim_size, float margin_factor) {
+    init(typename cloud_t::ConstPtr cloud, gpu_state::sptr_t state) {
+        pcl::search::KdTree<PointT> kdtree;
+        kdtree.setInputCloud(cloud);
+
+        // estimate resolution
+        std::mt19937 gen;
+        std::uniform_int_distribution<uint32_t> dis(0, cloud->size()-1);
+
+        std::vector<int> is(2);
+        std::vector<float> ds(2);
+        resolution_ = 0.f;
+        for (uint32_t i = 0; i < 100; ++i) {
+            kdtree.nearestKSearch(cloud->points[dis(gen)], 2, is, ds);
+
+            resolution_ += (sqrtf(ds[1])-resolution_) / (i+1);
+        }
+
         // compute local base
         mat3f_t base = detail::pca<PointT>(cloud).transpose();
         // compute bbox in local base
@@ -44,13 +59,18 @@ struct model<PointT>::impl {
         vec3f_t lower = bbox.min();
         vec3f_t upper = bbox.max();
         vec3f_t range = upper - lower;
-        vec3f_t margin = vec3f_t::Constant(margin_factor * range.maxCoeff());
+        vec3f_t margin = vec3f_t::Constant(4.f * resolution_);
         lower -= margin;
         upper += margin;
         range = upper-lower;
 
-        float voxel_step = range.maxCoeff() / max_dim_size;
-        extents_ = (range / voxel_step)
+        //float voxel_step = range.maxCoeff() / max_dim_size;
+        //redundancy_ = static_cast<double>(std::pow(voxel_step / resolution_, 3.f));
+        //extents_ = (range / voxel_step)
+                       //.template cast<int>()
+                       //.cwiseMax(vec3i_t::Constant(1));
+
+        extents_ = (range / resolution_)
                        .template cast<int>()
                        .cwiseMax(vec3i_t::Constant(1));
 
@@ -66,9 +86,6 @@ struct model<PointT>::impl {
         proj_.block<3, 1>(0, 3) -= vec3f_t::Constant(0.5f);
 
         mat4f_t inv = proj_.inverse();
-
-        pcl::search::KdTree<PointT> kdtree;
-        kdtree.setInputCloud(cloud);
 
         uint32_t voxel_count = extents_[0] * extents_[1] * extents_[2];
         //distance_data_.resize(voxel_count);
@@ -112,6 +129,7 @@ struct model<PointT>::impl {
         gpu::copy(cpu_data_.begin(), cpu_data_.end(), gpu_data_.begin(), state->queue);
     }
 
+    float resolution_;
     vec3i_t extents_;
     mat4f_t proj_;
     cpu_data_t cpu_data_;
@@ -139,10 +157,15 @@ model<PointT>::extents() const {
 }
 
 template <typename PointT>
+inline float
+model<PointT>::resolution() const {
+    return impl_->resolution_;
+}
+
+template <typename PointT>
 inline void
-model<PointT>::init(typename cloud_t::ConstPtr cloud, gpu_state::sptr_t state,
-                    int max_dim_size, float margin_factor) {
-    return impl_->init(cloud, state, max_dim_size, margin_factor);
+model<PointT>::init(typename cloud_t::ConstPtr cloud, gpu_state::sptr_t state) {
+    return impl_->init(cloud, state);
 }
 
 template <typename PointT>

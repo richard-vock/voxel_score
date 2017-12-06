@@ -28,9 +28,10 @@ public:
 
     const vec3i_t& extents() const;
 
+    float resolution() const;
+
     void
-    init(typename cloud_t::ConstPtr cloud, gpu_state::sptr_t state,
-         int max_dim_size, float margin_factor);
+    init(typename cloud_t::ConstPtr cloud, gpu_state::sptr_t state);
 
     //gpu_dist_data_t& device_distance_data();
 
