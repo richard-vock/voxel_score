@@ -17,22 +17,23 @@ class score_functor {
 
         typedef pcl::PointCloud<PointSceneT>         scene_cloud_t;
         typedef pcl::PointCloud<PointModelT>         model_cloud_t;
-        typedef std::vector<int>                     subset_t;
 
     public:
         score_functor(gpu_state::sptr_t gstate);
 
         virtual ~score_functor();
 
-        void set_scene(typename scene_cloud_t::ConstPtr scene);
+        void set_scene(typename scene_cloud_t::ConstPtr scene, const subset_t& valid = subset_t());
 
-        void set_model(typename model_cloud_t::ConstPtr model, int max_dim_size, float margin_factor);
+        void set_model(typename model_cloud_t::ConstPtr model);
 
-        uint32_t correspondence_count(const mat4f_t& transform, float max_normalized_dist);
+        void reset(const subset_t& valid = subset_t());
+
+        uint32_t correspondence_count(const mat4f_t& transform, float score_distance_factor, bool use_mask);
 
         std::pair<mat4f_t, std::vector<int>>
-        icp(const mat4f_t& guess, float max_normalized_dist,
-            uint32_t max_iterations);
+        icp(const mat4f_t& guess, float score_distance_factor,
+            uint32_t max_iterations, bool use_mask = false, bool update_mask = true);
 
         const model<PointModelT>& get_model() const;
 
